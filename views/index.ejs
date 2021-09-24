@@ -88,16 +88,21 @@ var sampleRate = 0;
 var floatData = null;
 var mediaRecorder = null;
 function handleSuccess( stream ){
+  var mic = context.createMediaStreamSource( stream );
+
+  console.log( 'mic_start' );
   socketio.emit( 'mic_start', true );
   var options = { mimeType: 'audio/webm' }; //. .wav
   mediaRecorder = new MediaRecorder( stream, options );
   mediaRecorder.addEventListener( 'dataavailable', function( e ){
     if( e.data.size > 0 ){
       //. e.data
+      console.log( 'mic_input', e.data );
       socketio.emit( 'mic_input', e.data );
     }
   });
   mediaRecorder.addEventListener( 'stop', function(){
+    console.log( 'mic_stop' );
     socketio.emit( 'mic_stop', true );
   });
   mediaRecorder.start();
