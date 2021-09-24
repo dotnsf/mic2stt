@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<title>MIC2STT</title>
+<script type="text/javascript" src="//code.jquery.com/jquery-2.2.4.min.js"></script>
+<link href="//maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" rel="stylesheet"/>
+<script src="//maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+<link href="//use.fontawesome.com/releases/v5.8.1/css/all.css" rel="stylesheet"/>
+<script src="/socket.io/socket.io.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+
+<link rel="shortcut icon" href="/icon.png" type="image/png"/>
+<link rel="icon" href="/icon.png" type="image/png"/>
+<link rel="apple-touch-icon" href="/icon.png"/>
+
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="MIC2STT"/>
+
+<style type="text/css">
+html, body{
+  text-align: center;
+  background-color: #fafafa;
+  font-size: 20px;
+  color: #333;
+}
+.result_p{
+  text-align: left;
+  font-size: 12px;
+}
+.result_final{
+  color: #f33;
+  font-weight: bold;
+}
+
+.balloon1, .ballooned1 {
+  position: relative;
+  display: inline-block;
+  margin: 1.5em 0;
+  padding: 7px 10px;
+  min-width: 120px;
+  max-width: 100%;
+  color: #555;
+  font-size: 16px;
+  background: #e0edff;
+}
+
+.balloon1:before {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -15px;
+  border: 15px solid transparent;
+  border-top: 15px solid #e0edff;
+}
+
+.ballooned1{
+  width: 90%;
+  margin: 0.2em 0 !important;
+  background: #ffede0;
+}
+
+.balloon1 p {
+  margin: 0;
+  padding: 0;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <input type="button" id="recBtn" value="Rec" onClick="startRec();" style="display:block;"/>
+  <input type="button" id="stopBtn" value="Stop" onClick="stopRec();" style="display:none;"/>
+</div>
+
+<script>
+window.AudioContext = window.AudioContext || window.webkitAudioContext;
+var context = new AudioContext();
+
+var processor = null;
+var num = 0;
+var duration = 0.0;
+var length = 0;
+var sampleRate = 0;
+var floatData = null;
+var mediaRecorder = null;
+function handleSuccess( stream ){
+  socketio.emit( 'mic_start', true );
+  var options = { mimeType: 'audio/webm' }; //. .wav
+  mediaRecorder = new MediaRecorder( stream, options );
+  mediaRecorder.addEventListener( 'dataavailable', function( e ){
+    if( e.data.size > 0 ){
+      //. e.data
+      socketio.emit( 'mic_input', e.data );
+    }
+  });
+  mediaRecorder.addEventListener( 'stop', function(){
+    socketio.emit( 'mic_stop', true );
+  });
+  mediaRecorder.start();
+  /*
+  var source = context.createBufferSource();
+  var input = context.createMediaStreamSource( stream );
+  processor = context.createScriptProcessor( 1024, 1, 1 );
+  
+  input.connect( processor );
+  processor.onaudioprocess = function( e ){
+    console.log( e.inputBuffer );
+    //socketio.emit( 'mic_input', e );
+    //. 音声データ
+    var inputdata = e.inputBuffer.getChannelData(0);
+
+    if( !num ){
+      num = e.inputBuffer.numberOfChannels;
+      floatData = new Array(num);
+      for( var i = 0; i < num; i ++ ){
+        floatData[i] = [];
+      }
+      sampleRate = e.inputBuffer.sampleRate;
+    }
+    
+    var float32Array = e.inputBuffer.getChannelData( 0 );
+    if( availableData( float32Array ) ){
+      duration += e.inputBuffer.duration;
+      length += e.inputBuffer.length;
+      for( var i = 0; i < num ; i ++ ){
+        float32Array = e.inputBuffer.getChannelData( i );
+        Array.prototype.push.apply( floatData[i], float32Array );
+      }
+    }
+  };
+  processor.connect( context.destination );
+  */
+}
+
+function startRec(){
+  $('#recBtn').css( 'display', 'none' );
+  $('#stopBtn').css( 'display', 'block' );
+
+  navigator.mediaDevices.getUserMedia( { audio: true } ).then( handleSuccess );
+}
+
+function stopRec(){
+  $('#recBtn').css( 'display', 'block' );
+  $('#stopBtn').css( 'display', 'none' );
+
+  mediaRecorder.stop();
+  /*
+  if( processor ){
+    processor.disconnect();
+    processor.onaudioprocess = null;
+    processor = null;
+    
+    var audioBuffer = context.createBuffer( num, length, sampleRate );
+    for( var i = 0; i < num; i ++ ){
+      audioBuffer.getChannelData( i ).set( floatData[i] );
+    }
+    
+    //console.log( audioBuffer ); //. これを再生する
+    
+    var source = context.createBufferSource();
+
+    source.buffer = audioBuffer;           //. オーディオデータの実体（AudioBuffer インスタンス）
+    source.loop = false;                   //. ループ再生するか？
+    source.loopStart = 0;                  //. オーディオ開始位置（秒単位）
+    source.loopEnd = audioBuffer.duration; //. オーディオ終了位置（秒単位）
+    source.playbackRate.value = 1.0;       //. 再生速度＆ピッチ
+
+    source.connect( context.destination );
+
+    //. for lagacy browsers
+    source.start( 0 );
+    source.onended = function( event ){
+      //. イベントハンドラ削除
+      source.onended = null;
+      document.onkeydown = null;
+      num = 0;
+      duration = 0.0;
+      length = 0;
+
+      //. オーディオ終了
+      source.stop( 0 );
+
+      console.log( 'audio stopped.' );
+    };
+  }
+  */
+}
+
+function availableData( arr ){
+  var b = false;
+  for( var i = 0; i < arr.length && !b; i ++ ){
+    b = ( arr[i] != 0 );
+  }
+  
+  return b;
+}
+
+
+var uuid = generateUUID();
+var socketio = null;
+var idx = -1;
+var idxtexts = [];
+var last_timestamp_second = 0;
+
+var base_url = location.origin + '/';
+
+$(function(){
+  socketio = io.connect();
+  init();
+});
+
+function init(){
+  //. 初期化を通知
+  var msg = {
+    uuid: uuid,
+    timestamp: ( new Date() ).getTime()
+  };
+  socketio.emit( 'init_client', msg );
+
+  socketio.on( 'init_client_view', function( msg ){
+    console.log( 'init_client_view', msg );
+  });
+
+  socketio.on( 'event_client_view', function( evt ){
+    //console.log( 'event_client_view', evt );
+    /*
+    evt = {
+      result_index: 1,
+      results: [
+        {
+          final: false,
+          alternatives: [
+            {
+              transcript: "xxx xxxx xx xxxxxx ...",
+              timestamps: [
+                [ "xxx", 15.55, 16.04 ],
+                [ "xxxx", 16.25, 16.6 ],
+                [ "xx", 16.6, 16.71 ],
+                [ "xxxxxx", 16.71, 17.21 ],
+                  :
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    */
+
+    var timestamps = evt.results[0].alternatives[0].timestamps;
+    var idxtext = { index: evt.result_index, text: evt.results[0].alternatives[0].transcript, timestamp_second: timestamps[timestamps.length-1][2], final: evt.results[0].final };
+    idxtexts.push( idxtext );
+    //console.log( '0', last_timestamp_second, idxtexts );
+    if( last_timestamp_second == 0 ){
+      //setTimeout( showNextText, 1000 );
+      var ms = 1000;
+      var before = Date.now();
+      while( Date.now() < before + ms ){};
+      showNextText();
+    }
+  });
+}
+
+function uploadAudio(){
+  var form = $('#frm1').get()[0];
+  var formData = new FormData( form );
+  formData.append( 'timestamp', ( new Date() ).getTime() );
+  formData.append( 'uuid', uuid );
+  $.ajax({
+    type: 'POST',
+    url: '/audio',
+    data: formData,
+    contentType: false,
+    processData: false,
+    success: function( data, dataType ){
+      //. 実際はずっと処理中になるので、しばらく結果はかえって来ない
+      console.log( data );
+    },
+    error: function( jqXHR, textStatus, errorThrown ){
+      console.log( textStatus + ': ' + errorThrown );
+    }
+  });
+
+  return false;
+}
+
+function showNextText(){
+  //console.log( '1', last_timestamp_second, idxtexts );
+  if( idxtexts.length > 0 ){
+    var idxtext = idxtexts[0];
+    idxtexts.splice( 0, 1 );
+
+    console.log( idxtext.text );
+
+    last_timestamp_second = idxtext.timestamp_second;
+    if( idxtexts.length > 0 ){
+      last_timestamp_second = idxtext.timestamp_second;
+      var next_timestamp_second = idxtexts[0].timestamp_second;
+      var msec = ( next_timestamp_second - last_timestamp_second ) * 1000;
+
+      var before = Date.now();
+      while( Date.now() < before + msec ){};
+      showNextText();
+    }else{
+      last_timestamp_second = 0;
+    }
+  }else{
+    last_timestamp_second = 0;
+  }
+}
+
+function generateUUID(){
+  //. Cookie の値を調べて、有効ならその値で、空だった場合は生成する
+  var did = null;
+  cookies = document.cookie.split(";");
+  for( var i = 0; i < cookies.length; i ++ ){
+    var str = cookies[i].split("=");
+    var une = unescape( str[0] );
+    if( une == " deviceid" || une == "deviceid" ){
+      did = unescape( unescape( str[1] ) );
+    }
+  }
+
+  if( did == null ){
+    var s = 1000;
+    did = ( new Date().getTime().toString(16) ) + Math.floor( s * Math.random() ).toString(16);
+  }
+
+  var dt = ( new Date() );
+  var ts = dt.getTime();
+  ts += 1000 * 60 * 60 * 24 * 365 * 100; //. 100 years
+  dt.setTime( ts );
+  var value = ( "deviceid=" + did + '; expires=' + dt.toUTCString() + '; path=/' );
+  if( isMobileSafari() ){
+    $.ajax({
+      url: '/setcookie',
+      type: 'POST',
+      data: { value: value },
+      success: function( r ){
+        //console.log( 'success: ', r );
+      },
+      error: function( e0, e1, e2 ){
+        //console.log( 'error: ', e1, e2 );
+      }
+    });
+  }else{
+    document.cookie = ( value );
+    //console.log( 'value: ', value );
+  }
+
+  return did;
+}
+
+function isMobileSafari(){
+  return ( navigator.userAgent.indexOf( 'Safari' ) > 0 && navigator.userAgent.indexOf( 'Mobile' ) > 0 );
+}
+</script>
+</body>
+</html>
