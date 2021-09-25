@@ -3,7 +3,6 @@ var express = require( 'express' ),
     bodyParser = require( 'body-parser' ),
     ejs = require( 'ejs' ),
     fs = require( 'fs' ),
-    multer = require( 'multer' ),
     app = express();
 var { Readable } = require( 'stream' );
 
@@ -11,7 +10,6 @@ var my_s2t = require( './my_s2t' );
 
 var settings = require( './settings' );
 
-app.use( multer( { dest: './tmp/' } ).single( 'voice' ) );
 app.use( bodyParser.urlencoded( { extended: true } ) );
 app.use( bodyParser.json() );
 app.use( express.Router() );
@@ -27,16 +25,14 @@ var io = require( 'socket.io' )( http );
 //. S2T
 var s2t_params = {
   objectMode: true,
-  //contentType: 'audio/l16; rate=48000', //'audio/l16', //'audio/wav', //'audio/mp3',
   contentType: 'audio/g729',
-  model: 'ja-JP_NarrowbandModel', //settings.s2t_model,
+  model: settings.s2t_model + '_NarrowbandModel',
   //keywords: [],
   //keywordsThreshold: 0.5,
   interimResults: true,
-  timestamps: true,
+  //timestamps: true,
   maxAlternatives: 3
 };
-//var s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
 
 //. Page for client
 app.get( '/', function( req, res ){
@@ -58,52 +54,6 @@ app.get( '/files', function( req, res ){
   res.end();
 });
 
-app.post( '/voice', function( req, res ){
-  res.contentType( 'application/json; charset=utf-8' );
-
-  var voice = req.body.voice;
-  var uuid = req.body.uuid;
-  var voicefile = './public/' + voice;
-
-  processAudioFile( voicefile, uuid ).then( function( result ){
-    res.write( JSON.stringify( { status: true }, 2, null ) );
-    res.end();
-  }).catch( function( err ){
-    console.log( err );
-    res.status( 400 );
-    res.write( JSON.stringify( { status: false, error: err }, 2, null ) );
-    res.end();
-  })
-});
-
-app.post( '/audio', function( req, res ){
-  res.contentType( 'application/json; charset=utf-8' );
-
-  var voicefile = req.file.path;
-  var filename = req.file.originalname;
-  var uuid = req.body.uuid;
-
-  //. public フォルダへリネーム＆移動してから処理する
-  fs.rename( voicefile, './public/' + filename, function( err ){
-    if( err ){
-      console.log( err );
-      res.status( 400 );
-      res.write( JSON.stringify( { status: false, error: err }, 2, null ) );
-      res.end();
-    }else{
-      processAudioFile( './public/' + filename, uuid ).then( function( result ){
-        res.write( JSON.stringify( { status: true }, 2, null ) );
-        res.end();
-      }).catch( function( err ){
-        console.log( err );
-        res.status( 400 );
-        res.write( JSON.stringify( { status: false, error: err }, 2, null ) );
-        res.end();
-      })
-    }
-  });
-});
-
 app.post( '/setcookie', function( req, res ){
   res.contentType( 'application/json; charset=utf-8' );
 
@@ -114,56 +64,6 @@ app.post( '/setcookie', function( req, res ){
   res.write( JSON.stringify( { status: true }, 2, null ) );
   res.end();
 });
-
-async function processAudioFile( filepath, uuid, deleteFileWhenFinished ){
-  return new Promise( async function( resolve, reject ){
-    var s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
-    fs.createReadStream( filepath ).pipe( s2t_stream );
-    s2t_stream.on( 'data', function( evt ){
-      //console.log( evt );
-      /*
-      evt = {
-        result_index: 1,
-        results: [
-          {
-            final: false,
-            alternatives: [
-              {
-                transcript: "xxx xxxx xx xxxxxx ...",
-                timestamps: [
-                  [ "xxx", 15.55, 16.04 ],
-                  [ "xxxx", 16.25, 16.6 ],
-                  [ "xx", 16.6, 16.71 ],
-                  [ "xxxxxx", 16.71, 17.21 ],
-                    :
-                ]
-              }
-            ]
-          }
-        ]
-      }
-      */
-      sockets[uuid].emit( 'event_client_view', evt ); 
-      if( evt.results[0].final ){
-        var text = evt.results[0].alternatives[0].transcript;
-
-        //. Watson Discovery に問い合わせる？
-      }
-    });
-    s2t_stream.on( 'error', function( evt ){
-      if( deleteFileWhenFinished ){
-        fs.unlinkSync( filepath );
-      }
-      reject( evt );
-    });
-    s2t_stream.on( 'close', function( evt ){
-      if( deleteFileWhenFinished ){
-        fs.unlinkSync( filepath );
-      }
-      resolve( true );
-    });
-  });
-}
 
 
 //. socket.io

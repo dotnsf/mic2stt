@@ -1,51 +1,28 @@
 window.AudioContext = window.AudioContext || window.webkitAudioContext;
-var context = new AudioContext();
-
-window.onload = function(){
-}
-
+var context = null;
 var processor = null;
-var num = 0;
-var duration = 0.0;
-var length = 0;
-var sampleRate = 0;
-var floatData = null;
+var stt_result_texts = {};
 function handleSuccess( stream ){
-  var source = context.createBufferSource();
-  var input = context.createMediaStreamSource( stream );
-  processor = context.createScriptProcessor( 1024, 1, 1 );
-  
-  input.connect( processor );
-  processor.onaudioprocess = function( e ){
-    //. 音声データ
-    var inputdata = e.inputBuffer.getChannelData(0);
-
-    if( !num ){
-      num = e.inputBuffer.numberOfChannels;
-      floatData = new Array(num);
-      for( var i = 0; i < num; i ++ ){
-        floatData[i] = [];
-      }
-      sampleRate = e.inputBuffer.sampleRate;
-    }
-    
-    var float32Array = e.inputBuffer.getChannelData( 0 );
-    if( availableData( float32Array ) ){
-      duration += e.inputBuffer.duration;
-      length += e.inputBuffer.length;
-      for( var i = 0; i < num ; i ++ ){
-        float32Array = e.inputBuffer.getChannelData( i );
-        Array.prototype.push.apply( floatData[i], float32Array );
-      }
-    }
-  };
+  var mic = context.createMediaStreamSource( stream );
+  processor = context.createScriptProcessor( 1024, 2, 2 );
+  mic.connect( processor );
   processor.connect( context.destination );
+  processor.onaudioprocess = function( e ){
+    //. ここが適宜実行されるようにはなった
+    //var sampleRate = e.inputBuffer.sampleRate; // 48000
+    //socketio.emit( 'mic_rate', sampleRate );
+    socketio.emit( 'mic_input', { uuid: uuid, voicedata: e.inputBuffer.getChannelData(0) } );
+  };
+
+  socketio.emit( 'mic_start', uuid );
 }
 
 function startRec(){
   $('#recBtn').css( 'display', 'none' );
   $('#stopBtn').css( 'display', 'block' );
 
+  stt_result_texts = {};
+  context = new AudioContext();
   navigator.mediaDevices.getUserMedia( { audio: true } ).then( handleSuccess );
 }
 
@@ -57,47 +34,121 @@ function stopRec(){
     processor.disconnect();
     processor.onaudioprocess = null;
     processor = null;
-    
-    var audioBuffer = context.createBuffer( num, length, sampleRate );
-    for( var i = 0; i < num; i ++ ){
-      audioBuffer.getChannelData( i ).set( floatData[i] );
-    }
-    
-    //console.log( audioBuffer ); //. これを再生する
-    
-    var source = context.createBufferSource();
-
-    source.buffer = audioBuffer;           //. オーディオデータの実体（AudioBuffer インスタンス）
-    source.loop = false;                   //. ループ再生するか？
-    source.loopStart = 0;                  //. オーディオ開始位置（秒単位）
-    source.loopEnd = audioBuffer.duration; //. オーディオ終了位置（秒単位）
-    source.playbackRate.value = 1.0;       //. 再生速度＆ピッチ
-
-    source.connect( context.destination );
-
-    //. for lagacy browsers
-    source.start( 0 );
-    source.onended = function( event ){
-      //. イベントハンドラ削除
-      source.onended = null;
-      document.onkeydown = null;
-      num = 0;
-      duration = 0.0;
-      length = 0;
-
-      //. オーディオ終了
-      source.stop( 0 );
-
-      console.log( 'audio stopped.' );
-    };
   }
 }
 
-function availableData( arr ){
-  var b = false;
-  for( var i = 0; i < arr.length && !b; i ++ ){
-    b = ( arr[i] != 0 );
+
+var uuid = generateUUID();
+var socketio = null;
+
+var base_url = location.origin + '/';
+
+$(function(){
+  socketio = io.connect();
+  init();
+});
+
+function init(){
+  //. 初期化を通知
+  var msg = {
+    uuid: uuid,
+    timestamp: ( new Date() ).getTime()
+  };
+  socketio.emit( 'init_client', msg );
+
+  socketio.on( 'init_client_view', function( msg ){
+  });
+
+  socketio.on( 'stt_result', function( evt ){
+    //console.log( 'stt_result', evt );
+    /*
+    evt = {
+      result_index: 1,
+      results: [
+        {
+          final: false,
+          alternatives: [
+            {
+              transcript: "xxx xxxx xx xxxxxx ...",
+              timestamps: [
+                [ "xxx", 15.55, 16.04 ],
+                [ "xxxx", 16.25, 16.6 ],
+                [ "xx", 16.6, 16.71 ],
+                [ "xxxxxx", 16.71, 17.21 ],
+                  :
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    */
+
+    try{
+      var idx = '' + evt.result_index;
+      var text = evt.results[0].alternatives[0].transcript;
+      var final = evt.results[0].final;
+      var idxtext = { index: '' + evt.result_index, text: evt.results[0].alternatives[0].transcript, final: evt.results[0].final };
+      if( !( idx in stt_result_texts ) ){
+        stt_result_texts[idx] = { final: false, text: '' };
+      }
+      if( !stt_result_texts[idx].final ){
+        stt_result_texts[idx].final = final;
+        stt_result_texts[idx].text = text;
+      }
+
+      $('#stt_results').html( '' );
+      Object.keys( stt_result_texts ).forEach( function( key ){
+        var li = '<li id="li_' + key + '">' + stt_result_texts[key].text + '</li>';
+        $('#stt_results').append( li );
+      });
+    }catch( e ){
+    }
+  });
+}
+
+function generateUUID(){
+  //. Cookie の値を調べて、有効ならその値で、空だった場合は生成する
+  var did = null;
+  cookies = document.cookie.split(";");
+  for( var i = 0; i < cookies.length; i ++ ){
+    var str = cookies[i].split("=");
+    var une = unescape( str[0] );
+    if( une == " deviceid" || une == "deviceid" ){
+      did = unescape( unescape( str[1] ) );
+    }
   }
-  
-  return b;
+
+  if( did == null ){
+    var s = 1000;
+    did = ( new Date().getTime().toString(16) ) + Math.floor( s * Math.random() ).toString(16);
+  }
+
+  var dt = ( new Date() );
+  var ts = dt.getTime();
+  ts += 1000 * 60 * 60 * 24 * 365 * 100; //. 100 years
+  dt.setTime( ts );
+  var value = ( "deviceid=" + did + '; expires=' + dt.toUTCString() + '; path=/' );
+  if( isMobileSafari() ){
+    $.ajax({
+      url: '/setcookie',
+      type: 'POST',
+      data: { value: value },
+      success: function( r ){
+        //console.log( 'success: ', r );
+      },
+      error: function( e0, e1, e2 ){
+        //console.log( 'error: ', e1, e2 );
+      }
+    });
+  }else{
+    document.cookie = ( value );
+    //console.log( 'value: ', value );
+  }
+
+  return did;
+}
+
+function isMobileSafari(){
+  return ( navigator.userAgent.indexOf( 'Safari' ) > 0 && navigator.userAgent.indexOf( 'Mobile' ) > 0 );
 }
