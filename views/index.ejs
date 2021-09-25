@@ -21,72 +21,31 @@
 
 <style type="text/css">
 html, body{
-  text-align: center;
+  text-align: left;
   background-color: #fafafa;
   font-size: 20px;
   color: #333;
-}
-.result_p{
-  text-align: left;
-  font-size: 12px;
-}
-.result_final{
-  color: #f33;
-  font-weight: bold;
-}
-
-.balloon1, .ballooned1 {
-  position: relative;
-  display: inline-block;
-  margin: 1.5em 0;
-  padding: 7px 10px;
-  min-width: 120px;
-  max-width: 100%;
-  color: #555;
-  font-size: 16px;
-  background: #e0edff;
-}
-
-.balloon1:before {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  margin-left: -15px;
-  border: 15px solid transparent;
-  border-top: 15px solid #e0edff;
-}
-
-.ballooned1{
-  width: 90%;
-  margin: 0.2em 0 !important;
-  background: #ffede0;
-}
-
-.balloon1 p {
-  margin: 0;
-  padding: 0;
 }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <input type="button" id="recBtn" value="Rec" onClick="startRec();" style="display:block;"/>
-  <input type="button" id="stopBtn" value="Stop" onClick="stopRec();" style="display:none;"/>
+  <button class="btn btn-success" id="recBtn" value="Rec" onClick="startRec();" style="display:block;"><i class="fa fa-microphone" aria-hidden="true"></i></button>
+  <button class="btn btn-danger" id="stopBtn" value="Stop" onClick="stopRec();" style="display:none;"><i class="fa fa-stop" aria-hidden="true"></i></button>
+</div>
+
+<div class="container">
+  <ul id="stt_results">
+
+  </ul>
 </div>
 
 <script>
 window.AudioContext = window.AudioContext || window.webkitAudioContext;
 var context = null;
-
 var processor = null;
-var num = 0;
-var duration = 0.0;
-var length = 0;
-var sampleRate = 0;
-var floatData = null;
-var mediaRecorder = null;
+var stt_result_texts = {};
 function handleSuccess( stream ){
   var mic = context.createMediaStreamSource( stream );
   processor = context.createScriptProcessor( 1024, 2, 2 );
@@ -96,20 +55,17 @@ function handleSuccess( stream ){
     //. ここが適宜実行されるようにはなった
     //var sampleRate = e.inputBuffer.sampleRate; // 48000
     //socketio.emit( 'mic_rate', sampleRate );
-
-    var audiodata = new Int16Array( convertFloat32ToInt16( e.inputBuffer.getChannelData(0) ) );
-    //socketio.emit( 'mic_input', audiodata );
-    socketio.emit( 'mic_input', e.inputBuffer.getChannelData(0) );
+    socketio.emit( 'mic_input', { uuid: uuid, voicedata: e.inputBuffer.getChannelData(0) } );
   };
 
-  console.log( 'mic_start' );
-  socketio.emit( 'mic_start', true );
+  socketio.emit( 'mic_start', uuid );
 }
 
 function startRec(){
   $('#recBtn').css( 'display', 'none' );
   $('#stopBtn').css( 'display', 'block' );
 
+  stt_result_texts = {};
   context = new AudioContext();
   navigator.mediaDevices.getUserMedia( { audio: true } ).then( handleSuccess );
 }
@@ -118,75 +74,16 @@ function stopRec(){
   $('#recBtn').css( 'display', 'block' );
   $('#stopBtn').css( 'display', 'none' );
 
-  //mediaRecorder.stop();
   if( processor ){
     processor.disconnect();
     processor.onaudioprocess = null;
     processor = null;
   }
-  /*  
-    var audioBuffer = context.createBuffer( num, length, sampleRate );
-    for( var i = 0; i < num; i ++ ){
-      audioBuffer.getChannelData( i ).set( floatData[i] );
-    }
-    
-    //console.log( audioBuffer ); //. これを再生する
-    
-    var source = context.createBufferSource();
-
-    source.buffer = audioBuffer;           //. オーディオデータの実体（AudioBuffer インスタンス）
-    source.loop = false;                   //. ループ再生するか？
-    source.loopStart = 0;                  //. オーディオ開始位置（秒単位）
-    source.loopEnd = audioBuffer.duration; //. オーディオ終了位置（秒単位）
-    source.playbackRate.value = 1.0;       //. 再生速度＆ピッチ
-
-    source.connect( context.destination );
-
-    //. for lagacy browsers
-    source.start( 0 );
-    source.onended = function( event ){
-      //. イベントハンドラ削除
-      source.onended = null;
-      document.onkeydown = null;
-      num = 0;
-      duration = 0.0;
-      length = 0;
-
-      //. オーディオ終了
-      source.stop( 0 );
-
-      console.log( 'audio stopped.' );
-    };
-  }
-  */
-}
-
-function availableData( arr ){
-  var b = false;
-  for( var i = 0; i < arr.length && !b; i ++ ){
-    b = ( arr[i] != 0 );
-  }
-  
-  return b;
-}
-
-function convertFloat32ToInt16(buffer){
-  l = buffer.length;
-  buf = new Int16Array(l);
-
-  while( l-- ){
-    buf[l] = Math.min(1, buffer[l])*0x7FFF;
-  }
-
-  return buf.buffer;
 }
 
 
 var uuid = generateUUID();
 var socketio = null;
-var idx = -1;
-var idxtexts = [];
-var last_timestamp_second = 0;
 
 var base_url = location.origin + '/';
 
@@ -204,11 +101,10 @@ function init(){
   socketio.emit( 'init_client', msg );
 
   socketio.on( 'init_client_view', function( msg ){
-    console.log( 'init_client_view', msg );
   });
 
-  socketio.on( 'event_client_view', function( evt ){
-    //console.log( 'event_client_view', evt );
+  socketio.on( 'stt_result', function( evt ){
+    //console.log( 'stt_result', evt );
     /*
     evt = {
       result_index: 1,
@@ -232,66 +128,27 @@ function init(){
     }
     */
 
-    var timestamps = evt.results[0].alternatives[0].timestamps;
-    var idxtext = { index: evt.result_index, text: evt.results[0].alternatives[0].transcript, timestamp_second: timestamps[timestamps.length-1][2], final: evt.results[0].final };
-    idxtexts.push( idxtext );
-    //console.log( '0', last_timestamp_second, idxtexts );
-    if( last_timestamp_second == 0 ){
-      //setTimeout( showNextText, 1000 );
-      var ms = 1000;
-      var before = Date.now();
-      while( Date.now() < before + ms ){};
-      showNextText();
+    try{
+      var idx = '' + evt.result_index;
+      var text = evt.results[0].alternatives[0].transcript;
+      var final = evt.results[0].final;
+      var idxtext = { index: '' + evt.result_index, text: evt.results[0].alternatives[0].transcript, final: evt.results[0].final };
+      if( !( idx in stt_result_texts ) ){
+        stt_result_texts[idx] = { final: false, text: '' };
+      }
+      if( !stt_result_texts[idx].final ){
+        stt_result_texts[idx].final = final;
+        stt_result_texts[idx].text = text;
+      }
+
+      $('#stt_results').html( '' );
+      Object.keys( stt_result_texts ).forEach( function( key ){
+        var li = '<li id="li_' + key + '">' + stt_result_texts[key].text + '</li>';
+        $('#stt_results').append( li );
+      });
+    }catch( e ){
     }
   });
-}
-
-function uploadAudio(){
-  var form = $('#frm1').get()[0];
-  var formData = new FormData( form );
-  formData.append( 'timestamp', ( new Date() ).getTime() );
-  formData.append( 'uuid', uuid );
-  $.ajax({
-    type: 'POST',
-    url: '/audio',
-    data: formData,
-    contentType: false,
-    processData: false,
-    success: function( data, dataType ){
-      //. 実際はずっと処理中になるので、しばらく結果はかえって来ない
-      console.log( data );
-    },
-    error: function( jqXHR, textStatus, errorThrown ){
-      console.log( textStatus + ': ' + errorThrown );
-    }
-  });
-
-  return false;
-}
-
-function showNextText(){
-  //console.log( '1', last_timestamp_second, idxtexts );
-  if( idxtexts.length > 0 ){
-    var idxtext = idxtexts[0];
-    idxtexts.splice( 0, 1 );
-
-    console.log( idxtext.text );
-
-    last_timestamp_second = idxtext.timestamp_second;
-    if( idxtexts.length > 0 ){
-      last_timestamp_second = idxtext.timestamp_second;
-      var next_timestamp_second = idxtexts[0].timestamp_second;
-      var msec = ( next_timestamp_second - last_timestamp_second ) * 1000;
-
-      var before = Date.now();
-      while( Date.now() < before + msec ){};
-      showNextText();
-    }else{
-      last_timestamp_second = 0;
-    }
-  }else{
-    last_timestamp_second = 0;
-  }
 }
 
 function generateUUID(){

@@ -186,7 +186,7 @@ io.sockets.on( 'connection', function( socket ){
 
   var s2t_stream = null;
   socket.on( 'mic_start', function( b ){
-    console.log( 'mic_start' );
+    //console.log( 'mic_start' );
     //s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
   });
   socket.on( 'mic_rate', function( rate ){
@@ -195,13 +195,15 @@ io.sockets.on( 'connection', function( socket ){
   });
   socket.on( 'mic_input', function( data ){
     //. ここは１秒に数回実行される（データは送信されてきている）
-    console.log( 'mic_input'/*, data*/ );
-
+    //console.log( 'mic_input'/*, data*/ );
     s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
-    Readable.from( data ).pipe( s2t_stream );
+    Readable.from( data.voicedata ).pipe( s2t_stream );
     s2t_stream.on( 'data', function( evt ){
       //. 'audio/g729' & 'ja-JP_NarrowbandModel' だと、ここには来る？
-      console.log( evt );
+      //console.log( evt );
+
+      //. 元の（？）クライアントにだけ stt_result を返す
+      sockets[data.uuid].emit( 'stt_result', evt ); 
     });
     s2t_stream.on( 'error', function( evt ){
       console.log( 'error', evt );
@@ -229,11 +231,11 @@ io.sockets.on( 'connection', function( socket ){
       */
     });
     s2t_stream.on( 'close', function( evt ){
-      console.log( 'close', evt );
+      //console.log( 'close', evt );
     });
   });
   socket.on( 'mic_stop', function( b ){
-    console.log( 'mic_stop' );
+    //console.log( 'mic_stop' );
   });
 });
 
