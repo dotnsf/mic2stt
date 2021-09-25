@@ -8,6 +8,8 @@
 
 ## References
 
+https://cloud.ibm.com/apidocs/speech-to-text
+
 https://developers.google.com/web/fundamentals/media/recording-audio/
 
 https://stackoverflow.com/questions/56918100/streaming-audio-from-mic-across-websocket-i-can-see-the-data-being-sent-but-can

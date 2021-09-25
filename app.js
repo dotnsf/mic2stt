@@ -88,6 +88,9 @@ io.sockets.on( 'connection', function( socket ){
   socket.on( 'mic_start', function( b ){
     //console.log( 'mic_start' );
     //s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
+    /*
+    Error [ERR_STREAM_WRITE_AFTER_END]: write after end
+    */
   });
   socket.on( 'mic_rate', function( rate ){
     //console.log( 'mic_rate', rate );  //. rate = 48000
@@ -107,6 +110,9 @@ io.sockets.on( 'connection', function( socket ){
     });
     s2t_stream.on( 'error', function( evt ){
       console.log( 'error', evt );
+      /*
+       WebSocket connection error: WebSocket connection error
+      */
       /*
       audio/wav ->
        Error: unable to transcode data stream audio/wav -> audio/l16
