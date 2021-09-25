@@ -27,8 +27,9 @@ var io = require( 'socket.io' )( http );
 //. S2T
 var s2t_params = {
   objectMode: true,
-  contentType: 'audio/l16; rate=48000', //'audio/l16', //'audio/wav', //'audio/mp3',
-  model: settings.s2t_model,
+  //contentType: 'audio/l16; rate=48000', //'audio/l16', //'audio/wav', //'audio/mp3',
+  contentType: 'audio/g729',
+  model: 'ja-JP_NarrowbandModel', //settings.s2t_model,
   //keywords: [],
   //keywordsThreshold: 0.5,
   interimResults: true,
@@ -199,11 +200,27 @@ io.sockets.on( 'connection', function( socket ){
     s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
     Readable.from( data ).pipe( s2t_stream );
     s2t_stream.on( 'data', function( evt ){
-      //. この下のイベントは発生しない
+      //. 'audio/g729' & 'ja-JP_NarrowbandModel' だと、ここには来る？
       console.log( evt );
     });
     s2t_stream.on( 'error', function( evt ){
-      //console.log( 'error', evt );
+      console.log( 'error', evt );
+      /*
+      audio/wav ->
+       Error: unable to transcode data stream audio/wav -> audio/l16
+      */
+      /*
+      audio/flac ->
+       Error: nnable to transcode data stream audio/flac -> audio/l16
+      */
+      /*
+      audio/alaw ->
+       Error: Unable to transcode from audio/alaw to one of: audio/l16; rate=16000; channels=1, application/srgs, application/srgs+xml
+      */
+      /*
+      audio/g729 ->
+       Error: This 8000hz audio input requires a narrow band model.
+      */
       /*
       Error: could not detect endianness after looking at the tail XXXX non-zero byte string in a data stream of 2048 bytes. Is the bytestream really PCM data?
       */

@@ -94,12 +94,12 @@ function handleSuccess( stream ){
   processor.connect( context.destination );
   processor.onaudioprocess = function( e ){
     //. ここが適宜実行されるようにはなった
-    var sampleRate = e.inputBuffer.sampleRate;
-    socketio.emit( 'mic_rate', sampleRate );
+    //var sampleRate = e.inputBuffer.sampleRate; // 48000
+    //socketio.emit( 'mic_rate', sampleRate );
 
     var audiodata = new Int16Array( convertFloat32ToInt16( e.inputBuffer.getChannelData(0) ) );
-    socketio.emit( 'mic_input', audiodata );
-    //socketio.emit( 'mic_input', e.inputBuffer.getChannelData(0) );
+    //socketio.emit( 'mic_input', audiodata );
+    socketio.emit( 'mic_input', e.inputBuffer.getChannelData(0) );
   };
 
   console.log( 'mic_start' );
