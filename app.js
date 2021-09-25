@@ -5,6 +5,7 @@ var express = require( 'express' ),
     fs = require( 'fs' ),
     multer = require( 'multer' ),
     app = express();
+var { Readable } = require( 'stream' );
 
 var my_s2t = require( './my_s2t' );
 
@@ -26,7 +27,7 @@ var io = require( 'socket.io' )( http );
 //. S2T
 var s2t_params = {
   objectMode: true,
-  contentType: 'audio/mp3',
+  contentType: 'audio/l16; rate=48000', //'audio/l16', //'audio/wav', //'audio/mp3',
   model: settings.s2t_model,
   //keywords: [],
   //keywordsThreshold: 0.5,
@@ -182,11 +183,37 @@ io.sockets.on( 'connection', function( socket ){
     sockets[msg.uuid].emit( 'init_client_view', msg ); 
   });
 
+  var s2t_stream = null;
   socket.on( 'mic_start', function( b ){
     console.log( 'mic_start' );
+    //s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
+  });
+  socket.on( 'mic_rate', function( rate ){
+    //console.log( 'mic_rate', rate );  //. rate = 48000
+    //s2t_params.contentType = 'audio/l16; rate=' + rate;
   });
   socket.on( 'mic_input', function( data ){
-    console.log( 'mic_input' );
+    //. ここは１秒に数回実行される（データは送信されてきている）
+    console.log( 'mic_input'/*, data*/ );
+
+    s2t_stream = my_s2t.s2t.recognizeUsingWebSocket( s2t_params );
+    Readable.from( data ).pipe( s2t_stream );
+    s2t_stream.on( 'data', function( evt ){
+      //. この下のイベントは発生しない
+      console.log( evt );
+    });
+    s2t_stream.on( 'error', function( evt ){
+      //console.log( 'error', evt );
+      /*
+      Error: could not detect endianness after looking at the tail XXXX non-zero byte string in a data stream of 2048 bytes. Is the bytestream really PCM data?
+      */
+      /*
+      Error: rate parameter missing in mimetype audio/l16
+      */
+    });
+    s2t_stream.on( 'close', function( evt ){
+      console.log( 'close', evt );
+    });
   });
   socket.on( 'mic_stop', function( b ){
     console.log( 'mic_stop' );

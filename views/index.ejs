@@ -78,7 +78,7 @@ html, body{
 
 <script>
 window.AudioContext = window.AudioContext || window.webkitAudioContext;
-var context = new AudioContext();
+var context = null;
 
 var processor = null;
 var num = 0;
@@ -89,62 +89,28 @@ var floatData = null;
 var mediaRecorder = null;
 function handleSuccess( stream ){
   var mic = context.createMediaStreamSource( stream );
+  processor = context.createScriptProcessor( 1024, 2, 2 );
+  mic.connect( processor );
+  processor.connect( context.destination );
+  processor.onaudioprocess = function( e ){
+    //. ここが適宜実行されるようにはなった
+    var sampleRate = e.inputBuffer.sampleRate;
+    socketio.emit( 'mic_rate', sampleRate );
+
+    var audiodata = new Int16Array( convertFloat32ToInt16( e.inputBuffer.getChannelData(0) ) );
+    socketio.emit( 'mic_input', audiodata );
+    //socketio.emit( 'mic_input', e.inputBuffer.getChannelData(0) );
+  };
 
   console.log( 'mic_start' );
   socketio.emit( 'mic_start', true );
-  var options = { mimeType: 'audio/webm' }; //. .wav
-  mediaRecorder = new MediaRecorder( stream, options );
-  mediaRecorder.addEventListener( 'dataavailable', function( e ){
-    if( e.data.size > 0 ){
-      //. e.data
-      console.log( 'mic_input', e.data );
-      socketio.emit( 'mic_input', e.data );
-    }
-  });
-  mediaRecorder.addEventListener( 'stop', function(){
-    console.log( 'mic_stop' );
-    socketio.emit( 'mic_stop', true );
-  });
-  mediaRecorder.start();
-  /*
-  var source = context.createBufferSource();
-  var input = context.createMediaStreamSource( stream );
-  processor = context.createScriptProcessor( 1024, 1, 1 );
-  
-  input.connect( processor );
-  processor.onaudioprocess = function( e ){
-    console.log( e.inputBuffer );
-    //socketio.emit( 'mic_input', e );
-    //. 音声データ
-    var inputdata = e.inputBuffer.getChannelData(0);
-
-    if( !num ){
-      num = e.inputBuffer.numberOfChannels;
-      floatData = new Array(num);
-      for( var i = 0; i < num; i ++ ){
-        floatData[i] = [];
-      }
-      sampleRate = e.inputBuffer.sampleRate;
-    }
-    
-    var float32Array = e.inputBuffer.getChannelData( 0 );
-    if( availableData( float32Array ) ){
-      duration += e.inputBuffer.duration;
-      length += e.inputBuffer.length;
-      for( var i = 0; i < num ; i ++ ){
-        float32Array = e.inputBuffer.getChannelData( i );
-        Array.prototype.push.apply( floatData[i], float32Array );
-      }
-    }
-  };
-  processor.connect( context.destination );
-  */
 }
 
 function startRec(){
   $('#recBtn').css( 'display', 'none' );
   $('#stopBtn').css( 'display', 'block' );
 
+  context = new AudioContext();
   navigator.mediaDevices.getUserMedia( { audio: true } ).then( handleSuccess );
 }
 
@@ -152,13 +118,13 @@ function stopRec(){
   $('#recBtn').css( 'display', 'block' );
   $('#stopBtn').css( 'display', 'none' );
 
-  mediaRecorder.stop();
-  /*
+  //mediaRecorder.stop();
   if( processor ){
     processor.disconnect();
     processor.onaudioprocess = null;
     processor = null;
-    
+  }
+  /*  
     var audioBuffer = context.createBuffer( num, length, sampleRate );
     for( var i = 0; i < num; i ++ ){
       audioBuffer.getChannelData( i ).set( floatData[i] );
@@ -202,6 +168,17 @@ function availableData( arr ){
   }
   
   return b;
+}
+
+function convertFloat32ToInt16(buffer){
+  l = buffer.length;
+  buf = new Int16Array(l);
+
+  while( l-- ){
+    buf[l] = Math.min(1, buffer[l])*0x7FFF;
+  }
+
+  return buf.buffer;
 }
 
 
