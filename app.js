@@ -105,43 +105,29 @@ io.sockets.on( 'connection', function( socket ){
       //. 'audio/g729' & 'ja-JP_NarrowbandModel' だと、ここには来る？
       //console.log( evt );
 
-      //. 元の（？）クライアントにだけ stt_result を返す
+      //. 元のクライアントにだけ stt_result を返す
       sockets[data.uuid].emit( 'stt_result', evt ); 
     });
     s2t_stream.on( 'error', function( evt ){
-      console.log( 'error', evt );
+      //console.log( 'error', evt );
+      sockets[data.uuid].emit( 'stt_error', evt ); 
       /*
+       一定時間（数秒）経過後にこれが頻発する
+       マイクを止めて再試行すると、一定時間は正常に動いて、繰り返す。
+       タイムアウト？
        WebSocket connection error: WebSocket connection error
-      */
-      /*
-      audio/wav ->
-       Error: unable to transcode data stream audio/wav -> audio/l16
-      */
-      /*
-      audio/flac ->
-       Error: nnable to transcode data stream audio/flac -> audio/l16
-      */
-      /*
-      audio/alaw ->
-       Error: Unable to transcode from audio/alaw to one of: audio/l16; rate=16000; channels=1, application/srgs, application/srgs+xml
-      */
-      /*
-      audio/g729 ->
-       Error: This 8000hz audio input requires a narrow band model.
-      */
-      /*
-      Error: could not detect endianness after looking at the tail XXXX non-zero byte string in a data stream of 2048 bytes. Is the bytestream really PCM data?
-      */
-      /*
-      Error: rate parameter missing in mimetype audio/l16
       */
     });
     s2t_stream.on( 'close', function( evt ){
       //console.log( 'close', evt );
+      //s2t_stream.stop();
+      //s2t_stream.unpipe();
     });
   });
   socket.on( 'mic_stop', function( b ){
     //console.log( 'mic_stop' );
+    s2t_stream.stop();
+    s2t_stream.unpipe();
   });
 });
 

@@ -105,6 +105,11 @@ function init(){
     }catch( e ){
     }
   });
+
+  socketio.on( 'stt_error', function( evt ){
+    //. タイムアウト（？）エラーになったらマイク停止
+    stopRec();
+  });
 }
 
 function generateUUID(){
